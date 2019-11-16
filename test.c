@@ -66,8 +66,7 @@ typedef int data_t;
 #define DATA_VALUE 5
 
 #ifndef NDEBUG
-int
-assert_fun(int expr, const char *str, const char *file, const char* function, size_t line)
+int assert_fun(int expr, const char *str, const char *file, const char* function, size_t line)
 {
 	if(!(expr))
 	{
@@ -87,7 +86,7 @@ data_t data;
 #if MEASURE != 0
 struct stack_measure_arg
 {
-  int id;
+	int id;
 };
 typedef struct stack_measure_arg stack_measure_arg_t;
 
@@ -102,7 +101,7 @@ void* stack_measure_pop(void* arg)
     clock_gettime(CLOCK_MONOTONIC, &t_start[args->id]);
     for (i = 0; i < MAX_PUSH_POP / NB_THREADS; i++)
 	{
-	// See how fast your implementation can pop MAX_PUSH_POP elements in parallel
+		stack_pop(stack);
 	}
     clock_gettime(CLOCK_MONOTONIC, &t_stop[args->id]);
 
@@ -118,7 +117,7 @@ void* stack_measure_push(void* arg)
 	clock_gettime(CLOCK_MONOTONIC, &t_start[args->id]);
 	for (i = 0; i < MAX_PUSH_POP / NB_THREADS; i++)
 	{
-		// See how fast your implementation can push MAX_PUSH_POP elements in parallel
+		stack_push(stack, DATA_VALUE);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t_stop[args->id]);
 
@@ -300,7 +299,17 @@ int main(int argc, char **argv)
 	pthread_attr_t attr;
 	stack_measure_arg_t arg[NB_THREADS];
 	pthread_attr_init(&attr);
-
+	
+	stack = malloc(sizeof(stack_t));
+	stack->first = NULL;
+	
+	#if MEASURE == 1
+		for (i = 0; i < MAX_PUSH_POP; i++)
+		{
+			stack_push(stack, DATA_VALUE);
+		}
+	#endif
+	
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	for (i = 0; i < NB_THREADS; i++)
 	{

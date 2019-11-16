@@ -71,6 +71,7 @@ void stack_push(stack_t *stack, int value)
 	node *new = malloc(sizeof(*new));
 	if(stack == NULL || new == NULL)
 	{
+		printf("fail\n");
 		exit(EXIT_FAILURE);
 	}
 	
