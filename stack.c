@@ -45,8 +45,7 @@
 #endif
 #endif
 
-int
-stack_check(stack_t *stack)
+int stack_check(stack_t *stack)
 {
 // Do not perform any sanity check if performance is bein measured
 #if MEASURE == 0
@@ -61,38 +60,71 @@ stack_check(stack_t *stack)
 	return 1;
 }
 
-int /* Return the type you prefer */
-stack_push(/* Make your own signature */)
+void stack_push(stack_t *stack, int value)
 {
 #if NON_BLOCKING == 0
-  // Implement a lock_based stack
+	// Implement a lock_based stack
+	
+	pthread_mutex_lock(&mutex_stack);
+	
+	node *new = malloc(sizeof(*new));
+	if(stack == NULL || new == NULL)
+	{
+		exit(EXIT_FAILURE);
+	}
+	
+	new->value = value;
+	new->next = stack->first;
+	stack->first = new;	
+	
+	pthread_mutex_unlock(&mutex_stack);
+	
 #elif NON_BLOCKING == 1
-  // Implement a harware CAS-based stack
+	// Implement a harware CAS-based stack
 #else
-  /*** Optional ***/
-  // Implement a software CAS-based stack
+	/*** Optional ***/
+	// Implement a software CAS-based stack
 #endif
 
-  // Debug practice: you can check if this operation results in a stack in a consistent check
-  // It doesn't harm performance as sanity check are disabled at measurement time
-  // This is to be updated as your implementation progresses
-  stack_check((stack_t*)1);
-
-  return 0;
+	// Debug practice: you can check if this operation results in a stack in a consistent check
+	// It doesn't harm performance as sanity check are disabled at measurement time
+	// This is to be updated as your implementation progresses
+	stack_check((stack_t*)1);
 }
 
-int /* Return the type you prefer */
-stack_pop(/* Make your own signature */)
+int stack_pop(stack_t *stack)
 {
 #if NON_BLOCKING == 0
-  // Implement a lock_based stack
+	// Implement a lock_based stack
+	
+	pthread_mutex_lock(&mutex_stack);
+	
+	if(stack == NULL)
+	{
+		exit(EXIT_FAILURE);
+	}
+	
+	int unstacked_value;
+	
+	node *unstacked_node = stack->first;
+	
+	if(stack != NULL && stack->first != NULL){
+		unstacked_value = unstacked_node->value;
+		stack->first = unstacked_node->next;
+		free(unstacked_node);
+	}
+	
+	pthread_mutex_unlock(&mutex_stack);
+	
+	return unstacked_value;
+	
 #elif NON_BLOCKING == 1
-  // Implement a harware CAS-based stack
+	// Implement a harware CAS-based stack
 #else
-  /*** Optional ***/
-  // Implement a software CAS-based stack
+	/*** Optional ***/
+	// Implement a software CAS-based stack
 #endif
 
-  return 0;
+	return 0;
 }
 

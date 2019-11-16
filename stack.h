@@ -27,15 +27,25 @@
 #ifndef STACK_H
 #define STACK_H
 
+typedef struct node node;
+struct node
+{
+	int value;
+	node *next;	
+};
+
 struct stack
 {
-  int change_this_member;
+	node *first;
 };
 typedef struct stack stack_t;
 
-int stack_push(/* Make your own signature */);
-int stack_pop(/* Make your own signature */);
+pthread_mutex_t mutex_stack = PTHREAD_MUTEX_INITIALIZER;
+
+void stack_push(stack_t *stack, int value);
+int stack_pop(stack_t *stack);
 
 /* Use this to check if your stack is in a consistent state from time to time */
 int stack_check(stack_t *stack);
+
 #endif /* STACK_H */
