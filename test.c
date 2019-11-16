@@ -123,6 +123,29 @@ void* stack_measure_push(void* arg)
 
 	return NULL;
 }
+
+#elif MEASURE == 3
+void* stack_measure_push_pop(void* arg)
+{
+	stack_measure_arg_t *args = (stack_measure_arg_t*) arg;
+	int i;
+
+	clock_gettime(CLOCK_MONOTONIC, &t_start[args->id]);
+	for (i = 0; i < MAX_PUSH_POP / NB_THREADS; i++)
+	{	
+		stack_push(stack, DATA_VALUE);
+	}
+	for (i = 0; i < MAX_PUSH_POP / NB_THREADS; i++)
+	{	
+		stack_pop(stack);
+	}
+	clock_gettime(CLOCK_MONOTONIC, &t_stop[args->id]);
+
+	return NULL;
+}
+
+
+
 #endif
 #endif
 
@@ -317,7 +340,11 @@ int main(int argc, char **argv)
 	#if MEASURE == 1
 		pthread_create(&thread[i], &attr, stack_measure_pop, (void*)&arg[i]);
 	#else
+	#if MEASURE == 2
 		pthread_create(&thread[i], &attr, stack_measure_push, (void*)&arg[i]);
+	#else
+		pthread_create(&thread[i], &attr, stack_measure_push_pop, (void*)&arg[i]);
+	#endif
 	#endif
     }
 
@@ -326,12 +353,24 @@ int main(int argc, char **argv)
 		pthread_join(thread[i], NULL);
     }
 	clock_gettime(CLOCK_MONOTONIC, &stop);
-
+	
+	/*
 	// Print out results
 	for (i = 0; i < NB_THREADS; i++)
 	{
 		printf("Thread %d time: %f\n", i, timediff(&t_start[i], &t_stop[i]));
 	}
+	*/
+	
+	// Print out sum
+	float sum=0;
+	for (i = 0; i < NB_THREADS; i++)
+	{
+		sum += timediff(&t_start[i], &t_stop[i]);
+	}
+	printf("%f\n",sum);
+	
+	
 #endif
 
 	return 0;
