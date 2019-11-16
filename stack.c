@@ -36,12 +36,13 @@
 #include "non_blocking.h"
 
 #if NON_BLOCKING == 0
-#warning Stacks are synchronized through locks
+	#warning Stacks are synchronized through locks
+	pthread_mutex_t mutex_stack = PTHREAD_MUTEX_INITIALIZER;
 #else
 #if NON_BLOCKING == 1
-#warning Stacks are synchronized through hardware CAS
+	#warning Stacks are synchronized through hardware CAS
 #else
-#warning Stacks are synchronized through lock-based CAS
+	#warning Stacks are synchronized through lock-based CAS
 #endif
 #endif
 

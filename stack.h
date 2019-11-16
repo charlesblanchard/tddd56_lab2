@@ -40,8 +40,6 @@ struct stack
 };
 typedef struct stack stack_t;
 
-pthread_mutex_t mutex_stack = PTHREAD_MUTEX_INITIALIZER;
-
 void stack_push(stack_t *stack, int value);
 int stack_pop(stack_t *stack);
 
