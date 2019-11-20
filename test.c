@@ -353,17 +353,9 @@ int main(int argc, char **argv)
 		pthread_join(thread[i], NULL);
     }
 	clock_gettime(CLOCK_MONOTONIC, &stop);
-	
-	/*
-	// Print out results
-	for (i = 0; i < NB_THREADS; i++)
-	{
-		printf("Thread %d time: %f\n", i, timediff(&t_start[i], &t_stop[i]));
-	}
-	*/
-	
+		
 	// Print out sum
-	float sum=0;
+	double sum=0.0;
 	for (i = 0; i < NB_THREADS; i++)
 	{
 		sum += timediff(&t_start[i], &t_stop[i]);

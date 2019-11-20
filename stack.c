@@ -66,23 +66,41 @@ void stack_push(stack_t *stack, int value)
 #if NON_BLOCKING == 0
 	// Implement a lock_based stack
 	
-	pthread_mutex_lock(&mutex_stack);
-	
 	node *new = malloc(sizeof(*new));
 	if(stack == NULL || new == NULL)
 	{
-		printf("fail\n");
 		exit(EXIT_FAILURE);
 	}
 	
 	new->value = value;
-	new->next = stack->first;
-	stack->first = new;	
 	
+	pthread_mutex_lock(&mutex_stack);
+	
+	new->next = stack->first;
+	stack->first = new;
+		
 	pthread_mutex_unlock(&mutex_stack);
 	
 #elif NON_BLOCKING == 1
 	// Implement a harware CAS-based stack
+	
+	node *old = malloc(sizeof(*old));
+	
+	// new node
+	node *new = malloc(sizeof(*new));
+	if(stack == NULL || new == NULL)
+	{
+		exit(EXIT_FAILURE);
+	}
+	new->value = value;
+	
+	do{
+		old = stack->first;
+		new->next = old;
+	}while(cas( (size_t*)&(stack->first), (size_t) old,  (size_t)new) != (size_t)old);
+	
+	free(old);
+	
 #else
 	/*** Optional ***/
 	// Implement a software CAS-based stack
@@ -98,23 +116,18 @@ int stack_pop(stack_t *stack)
 {
 #if NON_BLOCKING == 0
 	// Implement a lock_based stack
+	int unstacked_value;
 	
 	pthread_mutex_lock(&mutex_stack);
 	
-	if(stack == NULL)
-	{
+	if(stack == NULL || stack->first == NULL)
 		exit(EXIT_FAILURE);
-	}
-	
-	int unstacked_value;
 	
 	node *unstacked_node = stack->first;
 	
-	if(stack != NULL && stack->first != NULL){
-		unstacked_value = unstacked_node->value;
-		stack->first = unstacked_node->next;
-		free(unstacked_node);
-	}
+	unstacked_value = unstacked_node->value;
+	stack->first = unstacked_node->next;
+	free(unstacked_node);
 	
 	pthread_mutex_unlock(&mutex_stack);
 	
@@ -122,8 +135,31 @@ int stack_pop(stack_t *stack)
 	
 #elif NON_BLOCKING == 1
 	// Implement a harware CAS-based stack
+	
+	node *new = malloc(sizeof(*new));
+	int unstacked_value;
+	
+	node *old = malloc(sizeof(*old));
+	
+	do{
+		if(stack == NULL || stack->first == NULL)
+			exit(EXIT_FAILURE);
+
+		old = stack->first;
+		new = stack->first->next;
+
+		unstacked_value = old->value;
+		
+	}while(cas((size_t*)&(stack->first), (size_t) old, (size_t) new) != (size_t)old);
+	
+	
+	free(old);
+
+	return unstacked_value;
+
 #else
 	/*** Optional ***/
+	#warning Not implemented
 	// Implement a software CAS-based stack
 #endif
 
