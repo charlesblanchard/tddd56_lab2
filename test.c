@@ -208,17 +208,144 @@ int test_pop_safe()
 // 3 Threads should be enough to raise and detect the ABA problem
 #define ABA_NB_THREADS 3
 
-int test_aba()
+element_t *elemA, *elemB, *shared, *trash;
+sem_t t0_semaphore, t1_semaphore, t2_semaphore;
+
+int
+stack_push_shared(stack_t *stack, element_t* newElem)
 {
-#if NON_BLOCKING == 1 || NON_BLOCKING == 2
-	int success, aba_detected = 0;
-	// Write here a test for the ABA problem
-	success = aba_detected;
-	return success;
-#else
-	// No ABA is possible with lock-based synchronization. Let the test succeed only
-	return 1;
-#endif
+  element_t* old;
+
+  do
+  {
+    old = stack->head;
+    newElem->next = old;
+  }
+  while (cas((size_t *)&stack->head, (size_t)old, (size_t)newElem) != (size_t)old) ;
+ 
+  return 0;
+}
+
+
+int
+stack_pop_shared(stack_t *stack, element_t** buffer)
+{
+  element_t *old;
+
+  do
+  {
+    old = stack->head;
+  } while (cas((size_t *)&stack->head, (size_t)old, (size_t)old->next) != (size_t)old);
+
+  *buffer = old;
+
+  return 0;
+}
+
+
+int
+stack_pop_unlucky(stack_t *stack, element_t** buffer)
+{
+  element_t *old;
+  element_t *old_next = malloc(sizeof(element_t*));
+
+  do
+  {
+    old = stack->head;
+    memcpy(old_next, old->next, sizeof(element_t*));
+
+    printf("old is %p, head is %p, next is %p\n", old, stack->head, old->next);
+
+    // Tell T1 to start
+    sem_post(&t1_semaphore);
+    // Wait until it is time for T0 to go ahead and ruin everything
+    sem_wait(&t0_semaphore);
+
+    printf("old is %p, head is %p, next is %p\n", old, stack->head, old->next);
+  } while (cas((size_t *)&stack->head, (size_t)old, (size_t)old_next) != (size_t)old) ;
+
+  *buffer = old;
+  
+  return 0;
+}
+
+void*
+thread_aba_t0(void* arg)
+{
+  printf("T0 pops A {\n");
+    stack_pop_unlucky(stack, &trash);
+  printf("} T0\n\n");
+
+  return NULL;
+}
+
+void*
+thread_aba_t1(void* arg)
+{
+  sem_wait(&t1_semaphore);
+
+  printf(" T1 pops A {\n");
+    stack_pop_shared(stack, &shared);
+  printf(" } %p T1\n\n", shared);
+
+  sem_post(&t2_semaphore);
+  sem_wait(&t1_semaphore);
+
+  printf(" T1 pushes A %p {\n", shared);
+    stack_push_shared(stack, shared);
+  printf(" } T1\n\n");
+
+  sem_post(&t0_semaphore);
+  return NULL;
+}
+
+void*
+thread_aba_t2(void* arg)
+{
+  sem_wait(&t2_semaphore);
+
+  printf(" T2 pops B {\n");
+    stack_pop_shared(stack, &trash);
+  printf(" } T2\n\n");
+
+  sem_post(&t1_semaphore);
+
+  return NULL;
+}
+
+
+
+int
+test_aba()
+{
+  int success, aba_detected = 0;
+  pthread_t t0, t1, t2;
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+  elemA = malloc(sizeof(element_t));
+  elemB = malloc(sizeof(element_t));
+
+  stack_push_shared(stack, elemB);
+  stack_push_shared(stack, elemA);
+
+  sem_init(&t0_semaphore, 0, 0);
+  sem_init(&t1_semaphore, 0, 0);
+  sem_init(&t2_semaphore, 0, 0);
+
+  pthread_create(&t0, &attr, &thread_aba_t0, NULL);
+  pthread_create(&t1, &attr, &thread_aba_t1, NULL);
+  pthread_create(&t2, &attr, &thread_aba_t2, NULL);
+
+  pthread_join(t0, NULL);
+  pthread_join(t1, NULL);
+  pthread_join(t2, NULL);
+
+  aba_detected = (stack->head != NULL);
+
+  success = aba_detected;
+  return success;
 }
 
 // We test here the CAS function
