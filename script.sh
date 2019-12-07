@@ -6,7 +6,7 @@ do
 	echo $i
 	make NON_BLOCKING=$1 MEASURE=$2 NB_THREADS=$i > /dev/null
 	
-	for i in `seq 1 100`;
+	for i in `seq 1 10`;
 	do
 		./stack
 	done

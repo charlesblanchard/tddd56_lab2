@@ -102,7 +102,8 @@ void* stack_measure_pop(void* arg)
     clock_gettime(CLOCK_MONOTONIC, &t_start[args->id]);
     for (i = 0; i < MAX_PUSH_POP / NB_THREADS; i++)
 	{
-		stack_pop(stack);
+		node *n;
+		stack_pop(stack,&n);
 	}
     clock_gettime(CLOCK_MONOTONIC, &t_stop[args->id]);
 
@@ -118,7 +119,8 @@ void* stack_measure_push(void* arg)
 	clock_gettime(CLOCK_MONOTONIC, &t_start[args->id]);
 	for (i = 0; i < MAX_PUSH_POP / NB_THREADS; i++)
 	{
-		stack_push(stack, DATA_VALUE);
+		node *n;
+		stack_push(stack, n);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t_stop[args->id]);
 
@@ -134,11 +136,13 @@ void* stack_measure_push_pop(void* arg)
 	clock_gettime(CLOCK_MONOTONIC, &t_start[args->id]);
 	for (i = 0; i < MAX_PUSH_POP / NB_THREADS; i++)
 	{	
-		stack_push(stack, DATA_VALUE);
+		node *n;
+		stack_push(stack, &n);
 	}
 	for (i = 0; i < MAX_PUSH_POP / NB_THREADS; i++)
 	{	
-		stack_pop(stack);
+		node *n;
+		stack_pop(stack, n);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &t_stop[args->id]);
 
@@ -162,11 +166,7 @@ void test_setup()
 	data = DATA_VALUE;
 
 	// Allocate a new stack and reset its values
-	stack = malloc(sizeof(stack_t));
-
-	// Reset explicitely all members to a well-known initial value
-	// For instance (to be deleted as your stack design progresses):
-	stack->first = NULL;
+	stack = stack_alloc();
 }
 
 void test_teardown()
@@ -187,7 +187,7 @@ int test_push_safe()
 	// several threads push concurrently to it
 
 	// Do some work
-	stack_push(stack,DATA_VALUE);
+	//stack_push(stack,shared);
 
 	// check if the stack is in a consistent state
 	int res = assert(stack_check(stack));
@@ -206,44 +206,15 @@ int test_pop_safe()
 	return 0;
 }
 
-// 3 Threads should be enough to raise and detect the ABA problem
+
+
+
 #define ABA_NB_THREADS 3
-
-node *elemA, *elemB, *shared, *trash;
-sem_t t0_semaphore, t1_semaphore, t2_semaphore;
-
-int stack_push_shared(stack_t *stack, node* new)
-{
-	node* old;
-
-	do
-	{
-		old = stack->first;
-		new->next = old;
-	}
-	while (cas((size_t *)&stack->first, (size_t)old, (size_t)new) != (size_t)old) ;
-
-	return 0;
-}
+node *n1, *n2, *shr, *temp;
+sem_t semaphore[3];
 
 
-int stack_pop(stack_t *stack, node** buffer)
-{
-	node *old;
-
-	do
-	{
-		old = stack->first;
-	}
-	while (cas((size_t *)&stack->first, (size_t)old, (size_t)old->next) != (size_t)old);
-
-	*buffer = old;
-
-	return 0;
-}
-
-
-int stack_pop_custom(stack_t *stack, node** buffer)
+int stack_pop_custom(stack_t *stack, node** elem)
 {
 	node *old;
 	node *old_next = malloc(sizeof(node*));
@@ -251,98 +222,115 @@ int stack_pop_custom(stack_t *stack, node** buffer)
 	do
 	{
 		old = stack->first;
-		memcpy(old_next, old->next, sizeof(node*));
+		memcpy(old_next, old->next, sizeof(node));
 
-		printf("\told is %p, first is %p, next is %p\n", old, stack->first, old->next);
+		printf("old is %p, first is %p, next is %p\n", old, stack->first, old->next);
 
-		sem_post(&t1_semaphore);
+		// Dire à Thread 1 de demarrer
+		printf("Thread 0 libere sem1\n");
+		sem_post(&semaphore[1]);
+		// Attendre jusqu'à que ça soit bon
+		printf("Thread 0 attend sem0\n");
+		sem_wait(&semaphore[0]);
 
-		sem_wait(&t0_semaphore);
+		printf("old is %p, first is %p, next is %p\n", old, stack->first, old->next);
+	} while (cas((size_t *)&stack->first, (size_t)old, (size_t)old_next) != (size_t)old) ;
 
-		printf("\told is %p, first is %p, next is %p\n", old, stack->first, old->next);
-	}
-	while (cas((size_t *)&stack->first, (size_t)old, (size_t)old_next) != (size_t)old) ;
-
-	*buffer = old;
+	*elem = old;
 
 	return 0;
 }
 
-void *thread_aba_t0(void* arg)
+void *thread_aba(void* arg)
 {
-	printf("\nSTART Thread 0\n");
-	printf("\tt0 pops A\n");
-	stack_pop_custom(stack, &trash);
-	printf("END Thread 0\n\n");
+	int thread_id = *(int*)arg;
 
-	return NULL;
-}
-
-void *thread_aba_t1(void* arg)
-{
-	sem_wait(&t1_semaphore);
+	switch(thread_id)
+	{
+		case 0:
+			printf("START Thread 0\n");
+			printf("Thread 0 pops A\n");
+			stack_pop_custom(stack,&temp);
+			printf("END Thread 0\n");
+			break;
+		case 1:
+			printf("Thread 1 attend sem1\n");
+			sem_wait(&semaphore[1]);
 	
-	printf("START Thread 1\n");
-	printf("\tt1 pops A : ");
-	stack_pop(stack, &shared);
-	printf("%p\n\n", shared);
+			printf("START Thread 1\n");
+			printf("Thread 1 pops A\n");
+			stack_pop(stack,&shr);
+			printf("%p\n\n", shr);
 
-	sem_post(&t2_semaphore);
-	sem_wait(&t1_semaphore);
+			printf("Thread 1 libere sem2\n");
+			sem_post(&semaphore[2]);
+			printf("Thread 1 attend sem1\n");
+			sem_wait(&semaphore[1]);
 
-	printf("\tt1 pushes A : %p \n", shared);
-	stack_push(stack, shared);
-	printf("END Thread 1\n\n");
-	sem_post(&t0_semaphore);
+			printf("t1 pushes A : %p ", shr);
+			stack_push(stack, shr);
+			printf("Thread 1 libere sem0\n");
+			printf("END Thread 1\n");
+			sem_post(&semaphore[0]);
+			break;
+
+		case 2:
+			printf("Thread 2 attend sem2\n");
+			sem_wait(&semaphore[2]);
+			printf("START Thread 2\n");
+			printf("Thread 2 pops B\n");
+			stack_pop(stack,&temp);
+			printf("Thread 2 libere sem1\n");
+			printf("END Thread 2\n");
+			sem_post(&semaphore[1]);
+			break;
+	}
 	return NULL;
 }
-
-void *thread_aba_t2(void* arg)
-{
-	sem_wait(&t2_semaphore);
-	printf("START Thread 2\n");
-	printf("\tt2 pops B\n");
-	stack_pop(stack, &trash);
-	printf("END Thread 2\n\n");
-	sem_post(&t1_semaphore);
-
-	return NULL;
-}
-
-
 
 int test_aba()
 {
-	int success, aba_detected = 0;
-	pthread_t t0, t1, t2;
+	pthread_t thread[ABA_NB_THREADS];
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	elemA = malloc(sizeof(node));
-	elemB = malloc(sizeof(node));
+	// Nodes and stack initialization
+	n1 = malloc(sizeof(node));
+	n2 = malloc(sizeof(node));
 
-	stack_push(stack, elemB);
-	stack_push(stack, elemA);
+	stack_push(stack,n1);
+	stack_push(stack,n2);
 
-	sem_init(&t0_semaphore, 0, 0);
-	sem_init(&t1_semaphore, 0, 0);
-	sem_init(&t2_semaphore, 0, 0);
+	// Semaphore initialization
+	for(int i=0; i<3; i++)
+		sem_init(&semaphore[i], 0, 0);
+
+	printf("\n\n");
+
+
+	// Thread creation
+	int id[ABA_NB_THREADS];
+	for(int i=0; i<ABA_NB_THREADS; i++)
+	{
+		id[i] = i;
+		pthread_create(&thread[i], &attr, &thread_aba, (void*) &id[i]);
+	}
 	
-	printf("\n");
+	// Thread join
+	for(int i=0; i<ABA_NB_THREADS; i++)
+		pthread_join(thread[i], NULL);
 
-	pthread_create(&t0, &attr, &thread_aba_t0, NULL);
-	pthread_create(&t1, &attr, &thread_aba_t1, NULL);
-	pthread_create(&t2, &attr, &thread_aba_t2, NULL);
-
-	pthread_join(t0, NULL);
-	pthread_join(t1, NULL);
-	pthread_join(t2, NULL);
-
-	aba_detected = (stack->first != NULL);
-
-	success = aba_detected;
-	return success;
+	if((stack->first != NULL))
+	{
+		printf("\nTest ABA success\n");
+		return 1;
+	}
+	else
+	{
+		printf("\nTest ABA fail\n");
+		return 0;
+	}
 }
 
 // We test here the CAS function
@@ -450,10 +438,12 @@ int main(int argc, char **argv)
 	stack = malloc(sizeof(stack_t));
 	stack->first = NULL;
 	
+	node* tmp_node = malloc(sizeof(node*));
+
 	#if MEASURE == 1
 		for (i = 0; i < MAX_PUSH_POP; i++)
 		{
-			stack_push(stack, DATA_VALUE);
+			stack_push(stack, tmp_node);
 		}
 	#endif
 	

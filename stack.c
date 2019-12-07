@@ -61,106 +61,86 @@ int stack_check(stack_t *stack)
 	return 1;
 }
 
-void stack_push(stack_t *stack, int value)
-{
-#if NON_BLOCKING == 0
-	// Implement a lock_based stack
-	
-	node *new = malloc(sizeof(*new));
-	if(stack == NULL || new == NULL)
-	{
-		exit(EXIT_FAILURE);
-	}
-	
-	new->value = value;
-	
-	pthread_mutex_lock(&mutex_stack);
-	
-	new->next = stack->first;
-	stack->first = new;
-		
-	pthread_mutex_unlock(&mutex_stack);
-	
-#elif NON_BLOCKING == 1
-	// Implement a harware CAS-based stack
-	
-	node *old = malloc(sizeof(*old));
-	
-	// new node
-	node *new = malloc(sizeof(*new));
-	if(stack == NULL || new == NULL)
-	{
-		exit(EXIT_FAILURE);
-	}
-	new->value = value;
-	
-	do{
-		old = stack->first;
-		new->next = old;
-	}while(cas( (size_t*)&(stack->first), (size_t) old,  (size_t)new) != (size_t)old);
-	
-	free(old);
-	
-#else
-	/*** Optional ***/
-	// Implement a software CAS-based stack
-#endif
 
-	// Debug practice: you can check if this operation results in a stack in a consistent check
-	// It doesn't harm performance as sanity check are disabled at measurement time
-	// This is to be updated as your implementation progresses
-	stack_check((stack_t*)1);
+stack_t* stack_alloc()
+{
+	stack_t *res;
+
+	res = malloc(sizeof(stack_t));
+	assert(res != NULL);
+
+	if (res == NULL)
+		return NULL;
+
+	return res;
 }
 
-int stack_pop(stack_t *stack)
+
+int stack_push(stack_t *stack, node *elem)
 {
 #if NON_BLOCKING == 0
 	// Implement a lock_based stack
-	int unstacked_value;
-	
+
 	pthread_mutex_lock(&mutex_stack);
 	
-	if(stack == NULL || stack->first == NULL)
-		exit(EXIT_FAILURE);
-	
-	node *unstacked_node = stack->first;
-	
-	unstacked_value = unstacked_node->value;
-	stack->first = unstacked_node->next;
-	free(unstacked_node);
-	
+	elem->next = stack->first;
+	stack->first = elem;
+		
 	pthread_mutex_unlock(&mutex_stack);
-	
-	return unstacked_value;
 	
 #elif NON_BLOCKING == 1
 	// Implement a harware CAS-based stack
 	
-	node *new = malloc(sizeof(*new));
-	int unstacked_value;
+	node *old;
+
+	do{
+		old = stack->first;
+		elem->next = old;
+	}while(cas( (size_t*)&(stack->first), (size_t) old,  (size_t)elem) != (size_t)old);
 	
-	node *old = malloc(sizeof(*old));
+#else
+	/*** Optional ***/
+	// Implement a software CAS-based stack
+	#warning Not implemented
+#endif
+
+	return 0;
+}
+
+int stack_pop(stack_t *stack,node **elem)
+{
+	if(stack->first == NULL)
+	{
+    	return -1;
+	}
+
+#if NON_BLOCKING == 0
+	// Implement a lock_based stack
+	
+	pthread_mutex_lock(&mutex_stack);
+	
+	*elem = stack->first;
+	stack->first = stack->first->next;
+	
+	pthread_mutex_unlock(&mutex_stack);
+	
+#elif NON_BLOCKING == 1
+	// Implement a harware CAS-based stack
+	
+	node *old;
+	node *next;
 	
 	do{
-		if(stack == NULL || stack->first == NULL)
-			exit(EXIT_FAILURE);
-
 		old = stack->first;
-		new = stack->first->next;
-
-		unstacked_value = old->value;
-		
-	}while(cas((size_t*)&(stack->first), (size_t) old, (size_t) new) != (size_t)old);
+		next = old->next;		
+	}while(cas((size_t*)&(stack->first), (size_t) old, (size_t) next) != (size_t)old);
 	
-	
-	free(old);
-
-	return unstacked_value;
+	*elem = old;
 
 #else
 	/*** Optional ***/
-	#warning Not implemented
 	// Implement a software CAS-based stack
+	#warning Not implemented
 #endif
 
 	return 0;

@@ -23,6 +23,7 @@
 
 #include <stdlib.h>
 #include <pthread.h>
+#include <semaphore.h>
 
 #ifndef STACK_H
 #define STACK_H
@@ -40,8 +41,10 @@ struct stack
 };
 typedef struct stack stack_t;
 
-void stack_push(stack_t *stack, int value);
-int stack_pop(stack_t *stack);
+stack_t *stack_alloc();
+
+int stack_push(stack_t *stack, node *elem);
+int stack_pop(stack_t *stack, node **elem);
 
 /* Use this to check if your stack is in a consistent state from time to time */
 int stack_check(stack_t *stack);
