@@ -421,10 +421,10 @@ int main(int argc, char **argv)
 #if MEASURE == 0
 	test_init();
 
-	test_run(test_cas);
+	//test_run(test_cas);
 
-	test_run(test_push_safe);
-	test_run(test_pop_safe);
+	//test_run(test_push_safe);
+	//test_run(test_pop_safe);
 	test_run(test_aba);
 
 	test_finalize();
